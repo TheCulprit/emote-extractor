@@ -1,0 +1,118 @@
+* { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+body { background: #121212; color: #f1f1f1; margin: 0; padding: 20px; }
+.container { max-width: 1300px; margin: 0 auto; }
+
+header { display: flex; flex-direction: column; align-items: center; margin-bottom: 30px; }
+h1 { margin: 0 0 20px 0; font-weight: 800; color: #fff; letter-spacing: 1px; }
+
+/* Global Utility for Checkerboard Background */
+.bg-checker {
+  background-image: linear-gradient(45deg, #333 25%, transparent 25%), linear-gradient(-45deg, #333 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #333 75%), linear-gradient(-45deg, transparent 75%, #333 75%); 
+  background-size: 10px 10px; 
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0px; 
+}
+
+.wizard-steps { display: flex; gap: 15px; background: #1e1e1e; padding: 10px 20px; border-radius: 30px; border: 1px solid #333; }
+.step { color: #666; font-size: 14px; font-weight: bold; text-transform: uppercase; padding: 5px 10px; border-radius: 15px; }
+.step.active { color: #fff; background: #3b82f6; }
+
+.stage-panel { background: #1e1e1e; padding: 25px; border-radius: 12px; border: 1px solid #2a2a2a; box-shadow: 0 10px 30px rgba(0,0,0,0.5); min-height: 500px; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #333; }
+.toolbar h3 { margin: 0 0 5px 0; font-size: 20px; color: #fff; }
+.subtext { color: #9ca3af; font-size: 13px; margin: 0; }
+
+.btn-primary { background: #10b981; color: white; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; transition: 0.2s;}
+.btn-primary:hover { background: #059669; }
+.btn-secondary { background: #333; color: white; border: 1px solid #555; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; }
+
+/* STAGE 1 */
+.dropzone { border: 2px dashed #444; border-radius: 12px; padding: 80px 20px; text-align: center; background: #1a1a1a; cursor: pointer; transition: 0.2s; margin-top: 50px; }
+.dropzone.active { border-color: #3b82f6; background: #1e293b; }
+
+/* STAGE 2 */
+.slicing-canvas-container { position: relative; width: 100%; max-height: 65vh; background: #111; border: 1px solid #333; border-radius: 8px; overflow: hidden; user-select: none; }
+.slicing-bg { display: block; width: 100%; height: auto; pointer-events: none; }
+.crop-box { position: absolute; border: 2px solid #10b981; background: rgba(16, 185, 129, 0.15); cursor: move; border-radius: 4px; }
+.crop-box.active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.2); z-index: 10; box-shadow: 0 0 0 1px #fff; }
+.resize-handle { position: absolute; right: -6px; bottom: -6px; width: 14px; height: 14px; background: #fff; border: 2px solid #3b82f6; border-radius: 50%; cursor: se-resize; }
+.btn-delete-box { position: absolute; top: -10px; right: -10px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+.btn-delete-box:hover { background: #dc2626; transform: scale(1.1); }
+
+/* STAGE 3 */
+.split-screen { display: flex; gap: 30px; align-items: flex-start; transition: opacity 0.2s ease; }
+.cleanup-gallery { flex: 1; }
+.cleanup-thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 15px; }
+.cleanup-thumb { background: #222; border: 2px solid transparent; border-radius: 8px; cursor: pointer; overflow: hidden; transition: 0.1s; height: 100px; }
+.cleanup-thumb.active { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5); }
+.cleanup-thumb img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; display: block; }
+
+.cleanup-inspector { width: 380px; flex-shrink: 0; background: #222; border-radius: 8px; padding: 20px; border: 1px solid #333; position: sticky; top: 20px; display: flex; flex-direction: column; gap: 20px; }
+.inspector-section h4 { margin: 0 0 15px 0; color: #fff; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;}
+.inspector-section label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #ddd;}
+.inspector-section input[type=range] { width: 100%; }
+.inspector-divider { height: 1px; background: #333; width: 100%; }
+
+.btn-apply-settings { margin-top: 15px; background: #3b82f6; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; width: 100%; }
+.btn-apply-settings:hover:not(:disabled) { background: #2563eb; }
+.btn-apply-settings:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+.btn-reset-small { background: #333; color: #aaa; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: 0.2s;}
+.btn-reset-small:hover { background: #444; color: #fff; }
+
+.tool-selector { display: flex; gap: 10px; margin-bottom: 10px;}
+.btn-tool { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; background: #1a1a1a; border: 1px solid #444; color: #ccc; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold;}
+.btn-tool.active { background: #3b82f6; color: white; border-color: #60a5fa;}
+
+.hint { font-size: 11px; color: #aaa; margin: 0; }
+.canvas-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+
+/* Background Toggles UI */
+.bg-toggles { display: flex; gap: 6px; }
+.bg-toggle-btn { width: 22px; height: 22px; border-radius: 4px; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; padding: 0; background: #222; transition: 0.1s; }
+.bg-toggle-btn.active { border-color: #fff; transform: scale(1.1); box-shadow: 0 0 5px rgba(255,255,255,0.3); }
+
+.inspector-canvas-wrapper { width: 100%; border: 1px solid #444; border-radius: 4px; display: flex; justify-content: center; align-items: center; padding: 10px; min-height: 250px; transition: background-color 0.2s; }
+.inspector-canvas { max-width: 100%; max-height: 400px; width: auto; height: auto; display: block; margin: 0 auto; }
+
+.cursor-wand { cursor: crosshair; }
+.cursor-eraser { cursor: cell; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+/* STAGE 4 */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+.card { background: #222; border-radius: 8px; padding: 15px; position: relative; border: 1px solid #333; }
+.preview-box { display: flex; justify-content: center; position: relative; margin-bottom: 15px; }
+.preview-canvas { width: 150px; height: 150px; border: 1px solid #444; border-radius: 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.canvas-scaler { width: 100px; height: 100px; transform: scale(1.5); position: relative; }
+.canvas-scaler img { position: absolute; top: 50%; left: 50%; pointer-events: none; transform-origin: center; }
+.controls label { display: block; font-size: 11px; color: #ccc; margin-bottom: 8px; }
+.controls input[type=range] { width: 100%; margin-top: 4px; }
+
+/* STAGE 5 */
+.final-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.final-gallery-grid { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin-top: 20px; max-width: 800px; max-height: 400px; overflow-y: auto; padding: 20px; border-radius: 8px; border: 1px solid #333; }
+.final-emote-item { width: 100px; height: 100px; border-radius: 4px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid #444; }
+.final-emote-item img { position: absolute; top: 50%; left: 50%; pointer-events: none; transform-origin: center; }
+
+.btn-export-large { display: flex; align-items: center; gap: 10px; background: #3b82f6; color: white; border: none; padding: 15px 40px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 18px; transition: 0.2s;}
+.btn-export-large:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4); }
+
+/* Update the Slicing Container logic for Stage 2 */
+.slicing-workspace { width: 100%; max-height: 65vh; background: #111; border: 1px solid #333; border-radius: 8px; overflow: auto; text-align: center; }
+.slicing-canvas-container { position: relative; display: inline-block; margin: 0 auto; user-select: none; }
+.slicing-bg { display: block; max-width: 100%; height: auto; pointer-events: none; }
+
+/* Stage 1: Uploaded Sheets Preview */
+.uploaded-sheets-preview { margin-top: 30px; background: #222; padding: 20px; border-radius: 8px; border: 1px solid #333; }
+.sheet-thumbnails { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 15px; }
+.sheet-thumb { width: 80px; height: 80px; background: #111; border: 1px solid #444; border-radius: 6px; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.sheet-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.btn-remove-sheet { position: absolute; top: 2px; right: 2px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.btn-remove-sheet:hover { background: #dc2626; }
+
+/* Stage 2: Navigation */
+.sheet-navigation { display: flex; align-items: center; gap: 10px; background: #222; padding: 6px 12px; border-radius: 6px; border: 1px solid #444; font-size: 13px; font-weight: bold; }
+.sheet-navigation button { background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+.sheet-navigation button:disabled { opacity: 0.5; cursor: not-allowed; }
+.sheet-navigation button:hover:not(:disabled) { background: #444; }

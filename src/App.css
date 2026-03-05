@@ -23,22 +23,64 @@ h1 { margin: 0 0 20px 0; font-weight: 800; color: #fff; letter-spacing: 1px; }
 
 .btn-primary { background: #10b981; color: white; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; transition: 0.2s;}
 .btn-primary:hover { background: #059669; }
-.btn-secondary { background: #333; color: white; border: 1px solid #555; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; }
+.btn-secondary { background: #333; color: white; border: 1px solid #555; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; transition: 0.2s; }
+.btn-secondary:hover { background: #444; }
 
-/* STAGE 1 */
+/* STAGE 1: UPLOAD & GALLERY */
 .dropzone { border: 2px dashed #444; border-radius: 12px; padding: 80px 20px; text-align: center; background: #1a1a1a; cursor: pointer; transition: 0.2s; margin-top: 50px; }
 .dropzone.active { border-color: #3b82f6; background: #1e293b; }
 
-/* STAGE 2 */
-.slicing-canvas-container { position: relative; width: 100%; max-height: 65vh; background: #111; border: 1px solid #333; border-radius: 8px; overflow: hidden; user-select: none; }
-.slicing-bg { display: block; width: 100%; height: auto; pointer-events: none; }
+.uploaded-sheets-preview { margin-top: 30px; background: #222; padding: 20px; border-radius: 8px; border: 1px solid #333; }
+.sheet-thumbnails { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 15px; }
+.sheet-thumb { width: 80px; height: 80px; background: #111; border: 1px solid #444; border-radius: 6px; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.sheet-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.btn-remove-sheet { position: absolute; top: 2px; right: 2px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.btn-remove-sheet:hover { background: #dc2626; }
+
+/* STAGE 2: SLICING WORKSPACE (Fixed Distortion) */
+.slicing-workspace { 
+  width: 100%; 
+  height: 65vh; 
+  background: #111; 
+  border: 1px solid #333; 
+  border-radius: 8px; 
+  overflow: auto; /* Scrollable if image is tall */
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start; 
+}
+
+.slicing-canvas-container { 
+  position: relative; 
+  display: block; 
+  width: fit-content; /* Allows container to grow with image */
+  margin: 0 auto; 
+  user-select: none; 
+  box-shadow: 0 0 20px rgba(0,0,0,0.5);
+}
+
+.slicing-bg { 
+  display: block; 
+  max-width: 100%; /* Prevent horizontal overflow */
+  height: auto;    /* Maintain aspect ratio (Fixes squishing) */
+  pointer-events: none; 
+}
+
 .crop-box { position: absolute; border: 2px solid #10b981; background: rgba(16, 185, 129, 0.15); cursor: move; border-radius: 4px; }
 .crop-box.active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.2); z-index: 10; box-shadow: 0 0 0 1px #fff; }
 .resize-handle { position: absolute; right: -6px; bottom: -6px; width: 14px; height: 14px; background: #fff; border: 2px solid #3b82f6; border-radius: 50%; cursor: se-resize; }
 .btn-delete-box { position: absolute; top: -10px; right: -10px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
 .btn-delete-box:hover { background: #dc2626; transform: scale(1.1); }
 
-/* STAGE 3 */
+/* Navigation Buttons */
+.sheet-navigation { display: flex; align-items: center; gap: 10px; background: #222; padding: 6px 12px; border-radius: 6px; border: 1px solid #444; font-size: 13px; font-weight: bold; }
+.sheet-navigation button { background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+.sheet-navigation button:disabled { opacity: 0.5; cursor: not-allowed; }
+.sheet-navigation button:hover:not(:disabled) { background: #444; }
+
+
+/* STAGE 3: INSPECTOR & CLEANUP */
 .split-screen { display: flex; gap: 30px; align-items: flex-start; transition: opacity 0.2s ease; }
 .cleanup-gallery { flex: 1; }
 .cleanup-thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 15px; }
@@ -46,7 +88,19 @@ h1 { margin: 0 0 20px 0; font-weight: 800; color: #fff; letter-spacing: 1px; }
 .cleanup-thumb.active { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5); }
 .cleanup-thumb img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; display: block; }
 
-.cleanup-inspector { width: 380px; flex-shrink: 0; background: #222; border-radius: 8px; padding: 20px; border: 1px solid #333; position: sticky; top: 20px; display: flex; flex-direction: column; gap: 20px; }
+.cleanup-inspector { 
+  width: 550px; /* WIDER INSPECTOR */
+  flex-shrink: 0; 
+  background: #222; 
+  border-radius: 8px; 
+  padding: 20px; 
+  border: 1px solid #333; 
+  position: sticky; 
+  top: 20px; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 20px; 
+}
 .inspector-section h4 { margin: 0 0 15px 0; color: #fff; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;}
 .inspector-section label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #ddd;}
 .inspector-section input[type=range] { width: 100%; }
@@ -71,15 +125,34 @@ h1 { margin: 0 0 20px 0; font-weight: 800; color: #fff; letter-spacing: 1px; }
 .bg-toggle-btn { width: 22px; height: 22px; border-radius: 4px; border: 2px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; padding: 0; background: #222; transition: 0.1s; }
 .bg-toggle-btn.active { border-color: #fff; transform: scale(1.1); box-shadow: 0 0 5px rgba(255,255,255,0.3); }
 
-.inspector-canvas-wrapper { width: 100%; border: 1px solid #444; border-radius: 4px; display: flex; justify-content: center; align-items: center; padding: 10px; min-height: 250px; transition: background-color 0.2s; }
-.inspector-canvas { max-width: 100%; max-height: 400px; width: auto; height: auto; display: block; margin: 0 auto; }
+.inspector-canvas-wrapper { 
+  width: 100%; 
+  border: 1px solid #444; 
+  border-radius: 4px; 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  padding: 10px; 
+  min-height: 250px; 
+  transition: background-color 0.2s; 
+  overflow: hidden; 
+}
+
+/* Canvas Scaling for Precision Editing */
+.inspector-canvas { 
+  width: 100%; 
+  height: auto; 
+  display: block; 
+  margin: 0 auto; 
+  image-rendering: pixelated; 
+}
 
 .cursor-wand { cursor: crosshair; }
 .cursor-eraser { cursor: cell; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
 
-/* STAGE 4 */
+/* STAGE 4: TUNING GRID */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
 .card { background: #222; border-radius: 8px; padding: 15px; position: relative; border: 1px solid #333; }
 .preview-box { display: flex; justify-content: center; position: relative; margin-bottom: 15px; }
@@ -89,7 +162,7 @@ h1 { margin: 0 0 20px 0; font-weight: 800; color: #fff; letter-spacing: 1px; }
 .controls label { display: block; font-size: 11px; color: #ccc; margin-bottom: 8px; }
 .controls input[type=range] { width: 100%; margin-top: 4px; }
 
-/* STAGE 5 */
+/* STAGE 5: FINAL GALLERY */
 .final-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .final-gallery-grid { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin-top: 20px; max-width: 800px; max-height: 400px; overflow-y: auto; padding: 20px; border-radius: 8px; border: 1px solid #333; }
 .final-emote-item { width: 100px; height: 100px; border-radius: 4px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid #444; }
@@ -98,21 +171,47 @@ h1 { margin: 0 0 20px 0; font-weight: 800; color: #fff; letter-spacing: 1px; }
 .btn-export-large { display: flex; align-items: center; gap: 10px; background: #3b82f6; color: white; border: none; padding: 15px 40px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 18px; transition: 0.2s;}
 .btn-export-large:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4); }
 
-/* Update the Slicing Container logic for Stage 2 */
-.slicing-workspace { width: 100%; max-height: 65vh; background: #111; border: 1px solid #333; border-radius: 8px; overflow: auto; text-align: center; }
-.slicing-canvas-container { position: relative; display: inline-block; margin: 0 auto; user-select: none; }
-.slicing-bg { display: block; max-width: 100%; height: auto; pointer-events: none; }
+.btn-reset-small:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
-/* Stage 1: Uploaded Sheets Preview */
-.uploaded-sheets-preview { margin-top: 30px; background: #222; padding: 20px; border-radius: 8px; border: 1px solid #333; }
-.sheet-thumbnails { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 15px; }
-.sheet-thumb { width: 80px; height: 80px; background: #111; border: 1px solid #444; border-radius: 6px; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.sheet-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.btn-remove-sheet { position: absolute; top: 2px; right: 2px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
-.btn-remove-sheet:hover { background: #dc2626; }
+/* Add/Update these specific classes in your App.css */
 
-/* Stage 2: Navigation */
-.sheet-navigation { display: flex; align-items: center; gap: 10px; background: #222; padding: 6px 12px; border-radius: 6px; border: 1px solid #444; font-size: 13px; font-weight: bold; }
-.sheet-navigation button { background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
-.sheet-navigation button:disabled { opacity: 0.5; cursor: not-allowed; }
-.sheet-navigation button:hover:not(:disabled) { background: #444; }
+.local-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.sync-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #aaa;
+  cursor: pointer;
+  background: #1a1a1a;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #444;
+}
+
+.sync-toggle input { margin: 0; }
+.sync-toggle:hover { color: #fff; border-color: #666; }
+
+.local-sliders {
+  background: #1a1a1a;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  margin-bottom: 10px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}

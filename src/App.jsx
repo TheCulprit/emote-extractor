@@ -3,34 +3,38 @@ import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { detectEmoteBoxes, removeBackgroundGlobal, applyMagicWand } from './imageProcessor';
-import { Wand2, Eraser, Check, Download, UploadCloud, X, RotateCcw, RefreshCw } from 'lucide-react';
+import { Wand2, Eraser, Check, Download, UploadCloud, X, RotateCcw, RefreshCw, Undo2, Link } from 'lucide-react';
 import './App.css';
 
 export default function App() {
   const [stage, setStage] = useState(1);
-  const[isProcessing, setIsProcessing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   
-  // NEW: Multi-sheet state architecture
-  const[sheetsData, setSheetsData] = useState([]); // Array of { id, dataUrl, img, boxes }
+  // Sheet Data
+  const [sheetsData, setSheetsData] = useState([]); 
   const [activeSheetIndex, setActiveSheetIndex] = useState(0); 
   
-  const[activeBoxId, setActiveBoxId] = useState(null);
+  // Slicing State
+  const [activeBoxId, setActiveBoxId] = useState(null);
   const [interaction, setInteraction] = useState({ type: null });
   const containerRef = useRef(null);
 
+  // Emote State
   const [emotes, setEmotes] = useState([]);
+  
+  // Settings
   const [globalTolerance, setGlobalTolerance] = useState(15);
-  const[globalSmoothing, setGlobalSmoothing] = useState(1);
+  const [globalSmoothing, setGlobalSmoothing] = useState(1);
   const [activeTool, setActiveTool] = useState('color');
   const [selectedEmoteId, setSelectedEmoteId] = useState(null);
   const [inspectorBg, setInspectorBg] = useState('transparent');
 
-  // Helper variables for Stage 2
+  // Derived State
   const activeSheet = sheetsData[activeSheetIndex];
   const sheetImg = activeSheet?.img;
-  const boxes = activeSheet?.boxes ||[];
+  const boxes = activeSheet?.boxes || [];
 
-  // Proxy to update boxes specifically on the currently active sheet
+  // Helper to update boxes for the active sheet
   const setBoxes = (newBoxesOrUpdater) => {
     setSheetsData(prev => prev.map((sheet, i) => {
       if (i !== activeSheetIndex) return sheet;
@@ -44,7 +48,6 @@ export default function App() {
     if (files.length === 0) return;
     setIsProcessing(true);
 
-    // Timeout allows the UI to render the "Processing..." spinner before locking the thread
     setTimeout(async () => {
       const newSheets = await Promise.all(Array.from(files).map(file => {
         return new Promise((resolve) => {
@@ -78,7 +81,7 @@ export default function App() {
     const handlePaste = (e) => {
       const items = e.clipboardData?.items;
       if (!items) return;
-      const files =[];
+      const files = [];
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) files.push(items[i].getAsFile());
       }
@@ -143,9 +146,35 @@ export default function App() {
   const deleteBox = (id) => setBoxes(boxes.filter(b => b.id !== id));
   const clearBoxes = () => setBoxes([]);
 
-  // Process ALL boxes from ALL sheets
+  // --- PROCESSING CORE (RECIPE SYSTEM) ---
+  const regenerateEmote = async (emote, currentGlobalTol, currentGlobalSm) => {
+    const tol = emote.settings.useGlobal ? currentGlobalTol : emote.settings.tolerance;
+    const sm = emote.settings.useGlobal ? currentGlobalSm : emote.settings.smoothing;
+
+    // 1. Run Base Background Removal
+    const baseCleanUrl = await removeBackgroundGlobal(emote.originalData, tol, sm);
+
+    // 2. Re-play Manual Edits
+    if (emote.edits.length === 0) return baseCleanUrl;
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = emote.width; c.height = emote.height;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        emote.edits.forEach(edit => {
+          applyMagicWand(c, edit.x, edit.y, tol, edit.tool, sm);
+        });
+        resolve(c.toDataURL('image/png'));
+      };
+      img.src = baseCleanUrl;
+    });
+  };
+
   const processSlices = async () => {
-    const newEmotes =[];
+    const newEmotes = [];
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
@@ -162,12 +191,19 @@ export default function App() {
         ctx.clearRect(0, 0, w, h);
         ctx.drawImage(sheet.img, x, y, w, h, 0, 0, w, h);
         
+        const originalData = canvas.toDataURL('image/png');
+
         newEmotes.push({
           id: box.id,
-          originalData: canvas.toDataURL('image/png'),
-          cleanData: canvas.toDataURL('image/png'),
-          baseCleanData: canvas.toDataURL('image/png'),
+          originalData: originalData,
+          cleanData: originalData, 
           width: w, height: h,
+          edits: [], // Stores {x, y, tool} clicks
+          settings: { 
+            useGlobal: true, 
+            tolerance: globalTolerance, 
+            smoothing: globalSmoothing 
+          },
           tune: { scale: 1, x: 0, y: 0 }
         });
       });
@@ -178,27 +214,85 @@ export default function App() {
     setStage(3);
   };
 
-  // --- STAGE 3: CLEANUP (INSPECTOR UI) ---
-  const applyGlobalBackgroundRemoval = async () => {
-    const updated = await Promise.all(emotes.map(async (e) => {
-      const cleaned = await removeBackgroundGlobal(e.originalData, globalTolerance, globalSmoothing);
-      return { ...e, cleanData: cleaned, baseCleanData: cleaned };
-    }));
-    setEmotes(updated);
-  };
+  // --- STAGE 3: CLEANUP ---
 
+  // Initial Auto-Process on Stage Entry
   useEffect(() => { 
     if (stage === 3) {
       setIsProcessing(true);
-      setTimeout(async () => { await applyGlobalBackgroundRemoval(); setIsProcessing(false); }, 50);
+      setTimeout(async () => { 
+        const updated = await Promise.all(emotes.map(e => regenerateEmote(e, globalTolerance, globalSmoothing)));
+        setEmotes(prev => prev.map((e, i) => ({ ...e, cleanData: updated[i] })));
+        setIsProcessing(false); 
+      }, 50);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage]); 
 
-  const handleApplySettings = () => {
+  // Apply Global Defaults to "Synced" Emotes
+  const handleApplyGlobal = () => {
     setIsProcessing(true);
-    setTimeout(async () => { await applyGlobalBackgroundRemoval(); setIsProcessing(false); }, 50);
+    setTimeout(async () => { 
+      const updated = await Promise.all(emotes.map(e => {
+        if (e.settings.useGlobal) return regenerateEmote(e, globalTolerance, globalSmoothing);
+        else return Promise.resolve(e.cleanData); // Skip manually overridden emotes
+      }));
+      setEmotes(prev => prev.map((e, i) => ({ ...e, cleanData: updated[i] })));
+      setIsProcessing(false); 
+    }, 50);
   };
 
+  // 1. Update Local Settings State (Does not process yet)
+  const handleLocalSettingChange = (setting, value) => {
+    if (!selectedEmote) return;
+    const updatedEmote = { 
+      ...selectedEmote, 
+      settings: { ...selectedEmote.settings, [setting]: value, useGlobal: false } 
+    };
+    setEmotes(emotes.map(e => e.id === selectedEmote.id ? updatedEmote : e));
+  };
+
+  // 2. Explicit Apply Button for Local Settings
+  const handleApplyLocal = () => {
+    if (!selectedEmote) return;
+    setIsProcessing(true);
+    setTimeout(async () => {
+      const newData = await regenerateEmote(selectedEmote, globalTolerance, globalSmoothing);
+      setEmotes(prev => prev.map(e => e.id === selectedEmote.id ? { ...e, cleanData: newData } : e));
+      setIsProcessing(false);
+    }, 50);
+  };
+
+  // Toggle Sync
+  const toggleSyncGlobal = () => {
+    if (!selectedEmote) return;
+    const newVal = !selectedEmote.settings.useGlobal;
+    
+    // If switching to local, inherit current global values as a starting point
+    const updatedEmote = {
+      ...selectedEmote,
+      settings: { 
+        ...selectedEmote.settings, 
+        useGlobal: newVal,
+        tolerance: newVal ? selectedEmote.settings.tolerance : globalTolerance, 
+        smoothing: newVal ? selectedEmote.settings.smoothing : globalSmoothing
+      }
+    };
+
+    setEmotes(emotes.map(e => e.id === selectedEmote.id ? updatedEmote : e));
+    
+    // If switching BACK to global, auto-regenerate immediately for convenience
+    if (newVal) {
+      setIsProcessing(true);
+      setTimeout(async () => {
+        const newData = await regenerateEmote(updatedEmote, globalTolerance, globalSmoothing);
+        setEmotes(prev => prev.map(e => e.id === selectedEmote.id ? { ...e, cleanData: newData } : e));
+        setIsProcessing(false);
+      }, 50);
+    }
+  };
+
+  // Handle Wand Clicks
   const handleEmoteClickClean = (e, emoteId, canvasRef) => {
     const rect = canvasRef.current.getBoundingClientRect();
     const scaleX = canvasRef.current.width / rect.width;
@@ -209,27 +303,47 @@ export default function App() {
     
     const emoteIndex = emotes.findIndex(em => em.id === emoteId);
     const emote = emotes[emoteIndex];
+
+    const newEdit = { x, y, tool: activeTool };
+    const updatedEmote = { ...emote, edits: [...emote.edits, newEdit] };
     
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = emote.width; c.height = emote.height;
-      c.getContext('2d').drawImage(img, 0, 0);
-      
-      const newCleanData = applyMagicWand(c, x, y, globalTolerance, activeTool, globalSmoothing);
-      const newEmotes = [...emotes];
-      newEmotes[emoteIndex].cleanData = newCleanData;
-      setEmotes(newEmotes);
-    };
-    img.src = emote.cleanData;
+    // Update State
+    const newEmotes = [...emotes];
+    newEmotes[emoteIndex] = updatedEmote;
+    setEmotes(newEmotes);
+
+    // Regenerate Image
+    regenerateEmote(updatedEmote, globalTolerance, globalSmoothing).then(newData => {
+      setEmotes(prev => prev.map(p => p.id === emote.id ? { ...p, cleanData: newData } : p));
+    });
   };
 
-  const resetEmoteEdits = (id) => setEmotes(emotes.map(e => e.id === id ? { ...e, cleanData: e.baseCleanData } : e));
-  const selectedEmote = emotes.find(e => e.id === selectedEmoteId) || emotes[0];
+  const undoLastEdit = (id) => {
+    const emote = emotes.find(e => e.id === id);
+    if (!emote || emote.edits.length === 0) return;
 
-  // --- STAGE 4 & 5: TUNE & EXPORT ---
+    const updatedEmote = { ...emote, edits: emote.edits.slice(0, -1) };
+    setEmotes(emotes.map(e => e.id === id ? updatedEmote : e));
+    
+    regenerateEmote(updatedEmote, globalTolerance, globalSmoothing).then(newData => {
+      setEmotes(prev => prev.map(p => p.id === id ? { ...p, cleanData: newData } : p));
+    });
+  };
+
+  const resetEmoteEdits = (id) => {
+    const emote = emotes.find(e => e.id === id);
+    const updatedEmote = { ...emote, edits: [] }; 
+    setEmotes(emotes.map(e => e.id === id ? updatedEmote : e));
+
+    regenerateEmote(updatedEmote, globalTolerance, globalSmoothing).then(newData => {
+      setEmotes(prev => prev.map(p => p.id === id ? { ...p, cleanData: newData } : p));
+    });
+  };
+  
+  const selectedEmote = emotes.find(e => e.id === selectedEmoteId) || emotes[0];
   const updateTune = (id, newTune) => setEmotes(emotes.map(e => e.id === id ? { ...e, tune: newTune } : e));
 
+  // --- EXPORT ---
   const handleExport = async () => {
     const zip = new JSZip();
     const canvas = document.createElement('canvas');
@@ -282,7 +396,6 @@ export default function App() {
                <><UploadCloud size={48} color="#888" style={{margin:'0 auto 15px'}}/><p>Drag & drop your sprite sheets here</p><p className="subtext">Or paste from clipboard (Ctrl+V)</p></>
             )}
           </div>
-
           {sheetsData.length > 0 && (
             <div className="uploaded-sheets-preview">
               <h3>Uploaded Sheets ({sheetsData.length})</h3>
@@ -290,15 +403,11 @@ export default function App() {
                 {sheetsData.map((sheet, i) => (
                   <div key={sheet.id} className="sheet-thumb">
                     <img src={sheet.dataUrl} alt={`Sheet ${i+1}`} />
-                    <button className="btn-remove-sheet" title="Remove Sheet" onClick={() => setSheetsData(sheetsData.filter(s => s.id !== sheet.id))}>
-                      <X size={14} />
-                    </button>
+                    <button className="btn-remove-sheet" title="Remove Sheet" onClick={() => setSheetsData(sheetsData.filter(s => s.id !== sheet.id))}><X size={14} /></button>
                   </div>
                 ))}
               </div>
-              <button className="btn-primary" style={{width: '100%', marginTop: '20px'}} onClick={() => { setActiveSheetIndex(0); setStage(2); }}>
-                Proceed to Slicing &gt;
-              </button>
+              <button className="btn-primary" style={{width: '100%', marginTop: '20px'}} onClick={() => { setActiveSheetIndex(0); setStage(2); }}>Proceed to Slicing &gt;</button>
             </div>
           )}
         </div>
@@ -309,12 +418,8 @@ export default function App() {
           <div className="toolbar">
             <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
               <button className="btn-secondary" onClick={() => setStage(1)}>&lt; Back</button>
-              <div>
-                <h3>Adjust Crop Boxes</h3>
-                <p className="subtext">Drag boxes to move. Drag corners to resize. Click & drag empty space to draw.</p>
-              </div>
+              <div><h3>Adjust Crop Boxes</h3><p className="subtext">Drag boxes to move. Drag corners to resize. Click & drag empty space to draw.</p></div>
             </div>
-            
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               {sheetsData.length > 1 && (
                 <div className="sheet-navigation">
@@ -327,22 +432,11 @@ export default function App() {
               <button className="btn-primary" onClick={processSlices}>Confirm All Slices &gt;</button>
             </div>
           </div>
-          
           <div className="slicing-workspace">
             <div className="slicing-canvas-container" ref={containerRef} onPointerDown={onContainerPointerDown} style={{ touchAction: 'none' }}>
               <img src={sheetImg.src} alt="Sheet" className="slicing-bg" draggable="false" />
               {boxes.map(box => (
-                <div 
-                  key={box.id} 
-                  className={`crop-box ${activeBoxId === box.id ? 'active' : ''}`}
-                  onPointerDown={(e) => onBoxPointerDown(e, box.id, 'move')}
-                  style={{
-                    left: `${(box.x / sheetImg.width) * 100}%`,
-                    top: `${(box.y / sheetImg.height) * 100}%`,
-                    width: `${(box.w / sheetImg.width) * 100}%`,
-                    height: `${(box.h / sheetImg.height) * 100}%`
-                  }}
-                >
+                <div key={box.id} className={`crop-box ${activeBoxId === box.id ? 'active' : ''}`} onPointerDown={(e) => onBoxPointerDown(e, box.id, 'move')} style={{left: `${(box.x / sheetImg.width) * 100}%`, top: `${(box.y / sheetImg.height) * 100}%`, width: `${(box.w / sheetImg.width) * 100}%`, height: `${(box.h / sheetImg.height) * 100}%`}}>
                   <button className="btn-delete-box" onPointerDown={(e) => { e.stopPropagation(); deleteBox(box.id); }}><X size={12} /></button>
                   <div className="resize-handle" onPointerDown={(e) => onBoxPointerDown(e, box.id, 'resize')} />
                 </div>
@@ -355,10 +449,7 @@ export default function App() {
       {stage === 3 && (
         <div className="stage-panel stage3-panel">
           <div className="toolbar">
-            <div>
-              <h3>Cleanup Extracted Emotes</h3>
-              <p className="subtext">Select an emote on the left, edit it on the right.</p>
-            </div>
+            <div><h3>Cleanup Extracted Emotes</h3><p className="subtext">Select an emote on the left, edit it on the right.</p></div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button className="btn-secondary" onClick={() => setStage(2)} disabled={isProcessing}>&lt; Back</button>
               <button className="btn-primary" onClick={() => setStage(4)} disabled={isProcessing}>Tune &amp; Fit &gt;</button>
@@ -378,64 +469,70 @@ export default function App() {
 
             <div className="cleanup-inspector">
               <div className="inspector-section">
-                <h4>Global Auto-Clean</h4>
+                <h4>Global Defaults</h4>
                 <label>Tolerance: {globalTolerance}</label>
                 <input type="range" min="0" max="100" value={globalTolerance} onChange={(e)=>setGlobalTolerance(parseInt(e.target.value))} disabled={isProcessing} />
                 <label style={{marginTop: '10px'}}>Edge Smoothing: {globalSmoothing}px</label>
                 <input type="range" min="0" max="4" value={globalSmoothing} onChange={(e)=>setGlobalSmoothing(parseInt(e.target.value))} disabled={isProcessing} />
-                <button className="btn-apply-settings" onClick={handleApplySettings} disabled={isProcessing}>
-                  {isProcessing ? <><RefreshCw className="spin" size={16} /> Processing...</> : "Apply Settings"}
+                <button className="btn-apply-settings" onClick={handleApplyGlobal} disabled={isProcessing}>
+                  {isProcessing ? <><RefreshCw className="spin" size={16} /> Processing...</> : "Apply Defaults to All"}
                 </button>
               </div>
-
               <div className="inspector-divider"></div>
 
               {selectedEmote && (
                 <div className="inspector-section">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                     <h4>Local Edits</h4>
-                     <button className="btn-reset-small" onClick={() => resetEmoteEdits(selectedEmote.id)} title="Undo wand clicks">
-                        <RotateCcw size={14} /> Undo Local
-                     </button>
+                  <div className="local-settings-header">
+                     <h4>Selected Emote</h4>
+                     <label className="sync-toggle"><input type="checkbox" checked={selectedEmote.settings.useGlobal} onChange={toggleSyncGlobal} />{selectedEmote.settings.useGlobal ? <><Link size={12}/> Sync with Global</> : "Manual Override"}</label>
                   </div>
                   
-                  <div className="tool-selector">
-                    <button className={`btn-tool ${activeTool === 'color' ? 'active' : ''}`} onClick={()=>setActiveTool('color')} disabled={isProcessing}>
-                      <Wand2 size={16}/> Bg Wand
-                    </button>
-                    <button className={`btn-tool ${activeTool === 'island' ? 'active' : ''}`} onClick={()=>setActiveTool('island')} disabled={isProcessing}>
-                      <Eraser size={16}/> Object Eraser
-                    </button>
-                  </div>
+                  {!selectedEmote.settings.useGlobal && (
+                    <div className="local-sliders">
+                        <label>Local Tolerance: {selectedEmote.settings.tolerance}</label>
+                        <input type="range" min="0" max="100" value={selectedEmote.settings.tolerance} onChange={(e)=>handleLocalSettingChange('tolerance', parseInt(e.target.value))} />
+                        <label>Local Smoothing: {selectedEmote.settings.smoothing}</label>
+                        <input type="range" min="0" max="4" value={selectedEmote.settings.smoothing} onChange={(e)=>handleLocalSettingChange('smoothing', parseInt(e.target.value))} />
+                        <button className="btn-apply-settings" onClick={handleApplyLocal} disabled={isProcessing}>
+                           {isProcessing ? <><RefreshCw className="spin" size={16} /> Processing...</> : "Apply Local Changes"}
+                        </button>
+                    </div>
+                  )}
 
+                  <div className="inspector-divider" style={{margin: '15px 0'}}></div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                     <div className="tool-selector" style={{margin: 0}}>
+                        <button className={`btn-tool ${activeTool === 'color' ? 'active' : ''}`} onClick={()=>setActiveTool('color')} disabled={isProcessing} title="Bg Wand">
+                          <Wand2 size={16}/> <span>Bg Wand</span>
+                        </button>
+                        <button className={`btn-tool ${activeTool === 'island' ? 'active' : ''}`} onClick={()=>setActiveTool('island')} disabled={isProcessing} title="Object Eraser">
+                          <Eraser size={16}/> <span>Object Eraser</span>
+                        </button>
+                     </div>
+                     <div style={{ display: 'flex', gap: '5px' }}>
+                        <button className="btn-reset-small" onClick={() => undoLastEdit(selectedEmote.id)} title="Undo last change" disabled={selectedEmote.edits.length === 0}>
+                            <Undo2 size={14} /> <span>Undo</span>
+                        </button>
+                        <button className="btn-reset-small" onClick={() => resetEmoteEdits(selectedEmote.id)} title="Reset all changes">
+                            <RotateCcw size={14} /> <span>Reset</span>
+                        </button>
+                     </div>
+                  </div>
+                  
                   <div className="canvas-header">
-                     <span className="hint" style={{margin: 0}}>
-                       {activeTool === 'color' ? "Click trapped white spaces to delete them." : "Click stray objects to delete them."}
-                     </span>
+                     <span className="hint" style={{margin: 0}}>{activeTool === 'color' ? "Click trapped white spaces." : "Click stray objects."}</span>
                      <div className="bg-toggles">
-                       <button className={`bg-toggle-btn ${inspectorBg === 'transparent' ? 'active' : ''}`} onClick={() => setInspectorBg('transparent')} title="Checkerboard">🏁</button>
-                       <button className={`bg-toggle-btn ${inspectorBg === '#000000' ? 'active' : ''}`} onClick={() => setInspectorBg('#000000')} style={{background: '#000'}} title="Black"></button>
-                       <button className={`bg-toggle-btn ${inspectorBg === '#ffffff' ? 'active' : ''}`} onClick={() => setInspectorBg('#ffffff')} style={{background: '#fff'}} title="White"></button>
-                       <button className={`bg-toggle-btn ${inspectorBg === '#ff00ff' ? 'active' : ''}`} onClick={() => setInspectorBg('#ff00ff')} style={{background: '#ff00ff'}} title="Magenta"></button>
-                       <button className={`bg-toggle-btn ${inspectorBg === '#00ff00' ? 'active' : ''}`} onClick={() => setInspectorBg('#00ff00')} style={{background: '#00ff00'}} title="Neon Green"></button>
+                       <button className={`bg-toggle-btn ${inspectorBg === 'transparent' ? 'active' : ''}`} onClick={() => setInspectorBg('transparent')}>🏁</button>
+                       <button className={`bg-toggle-btn ${inspectorBg === '#000000' ? 'active' : ''}`} onClick={() => setInspectorBg('#000000')} style={{background: '#000'}}></button>
+                       <button className={`bg-toggle-btn ${inspectorBg === '#ffffff' ? 'active' : ''}`} onClick={() => setInspectorBg('#ffffff')} style={{background: '#fff'}}></button>
+                       <button className={`bg-toggle-btn ${inspectorBg === '#ff00ff' ? 'active' : ''}`} onClick={() => setInspectorBg('#ff00ff')} style={{background: '#ff00ff'}}></button>
+                       <button className={`bg-toggle-btn ${inspectorBg === '#00ff00' ? 'active' : ''}`} onClick={() => setInspectorBg('#00ff00')} style={{background: '#00ff00'}}></button>
                      </div>
                   </div>
 
                   <div className={`inspector-canvas-wrapper ${inspectorBg === 'transparent' ? 'bg-checker' : ''}`} style={{ backgroundColor: inspectorBg !== 'transparent' ? inspectorBg : 'transparent' }}>
-                     <canvas 
-                        width={selectedEmote.width} 
-                        height={selectedEmote.height} 
-                        className={`inspector-canvas ${activeTool === 'color' ? 'cursor-wand' : 'cursor-eraser'}`} 
-                        ref={(c) => {
-                          if(c) {
-                            const ctx = c.getContext('2d');
-                            const img = new Image(); 
-                            img.onload = () => { ctx.clearRect(0,0,c.width,c.height); ctx.drawImage(img,0,0); };
-                            img.src = selectedEmote.cleanData;
-                          }
-                        }} 
-                        onClick={(e) => handleEmoteClickClean(e, selectedEmote.id, {current: e.target})} 
-                      />
+                     <canvas width={selectedEmote.width} height={selectedEmote.height} className={`inspector-canvas ${activeTool === 'color' ? 'cursor-wand' : 'cursor-eraser'}`} ref={(c) => { if(c) { const ctx = c.getContext('2d'); const img = new Image(); img.onload = () => { ctx.clearRect(0,0,c.width,c.height); ctx.drawImage(img,0,0); }; img.src = selectedEmote.cleanData; }}} onClick={(e) => handleEmoteClickClean(e, selectedEmote.id, {current: e.target})} />
                   </div>
                 </div>
               )}
@@ -460,11 +557,7 @@ export default function App() {
               return (
                 <div key={emote.id} className="card">
                   <div className="preview-box">
-                    <div className="preview-canvas bg-checker">
-                      <div className="canvas-scaler">
-                        <img src={emote.cleanData} style={{ transform: `translate(calc(-50% + ${emote.tune.x}px), calc(-50% + ${emote.tune.y}px)) scale(${displayScale})`}} alt="" />
-                      </div>
-                    </div>
+                    <div className="preview-canvas bg-checker"><div className="canvas-scaler"><img src={emote.cleanData} style={{ transform: `translate(calc(-50% + ${emote.tune.x}px), calc(-50% + ${emote.tune.y}px)) scale(${displayScale})`}} alt="" /></div></div>
                   </div>
                   <div className="controls">
                     <label>Scale <input type="range" min="0.5" max="2" step="0.05" value={emote.tune.scale} onChange={(e) => updateTune(emote.id, {...emote.tune, scale: parseFloat(e.target.value)})} /></label>
@@ -483,24 +576,18 @@ export default function App() {
           <Check size={64} color="#10b981" style={{marginBottom: '20px'}}/>
           <h2>Ready to Export {emotes.length} Emotes</h2>
           <p className="subtext">All emotes have been perfectly fitted to a 100x100 transparent canvas.</p>
-
           <div className="final-gallery-grid bg-checker">
             {emotes.map(emote => {
               const baseScale = Math.min(98 / emote.width, 98 / emote.height);
               const displayScale = baseScale * emote.tune.scale;
               return (
-                <div key={`final_${emote.id}`} className="final-emote-item">
-                  <img src={emote.cleanData} style={{ transform: `translate(calc(-50% + ${emote.tune.x}px), calc(-50% + ${emote.tune.y}px)) scale(${displayScale})`}} alt="" />
-                </div>
+                <div key={`final_${emote.id}`} className="final-emote-item"><img src={emote.cleanData} style={{ transform: `translate(calc(-50% + ${emote.tune.x}px), calc(-50% + ${emote.tune.y}px)) scale(${displayScale})`}} alt="" /></div>
               );
             })}
           </div>
-
           <div style={{marginTop: '30px', display: 'flex', gap: '20px', justifyContent: 'center'}}>
             <button className="btn-secondary" onClick={() => setStage(4)}>&lt; Back to Tuning</button>
-            <button className="btn-export-large" onClick={handleExport}>
-              <Download size={20}/> Download .ZIP
-            </button>
+            <button className="btn-export-large" onClick={handleExport}><Download size={20}/> Download .ZIP</button>
           </div>
         </div>
       )}
